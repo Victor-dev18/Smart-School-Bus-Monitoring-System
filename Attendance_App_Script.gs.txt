@@ -1,0 +1,109 @@
+// Smart Attendance System with Google Sheets and Phone Number Support
+// Enhanced with debugging
+var ss = SpreadsheetApp.openById('YOUR_SHEET_ID_HERE'); // Replace with your actual Sheet ID
+var attendanceSheet = ss.getSheetByName('Sheet1'); // Main attendance sheet
+var contactsSheet = ss.getSheetByName('Contacts'); // Contacts sheet for name-phone mapping
+var timezone = "Asia/Kolkata"; // Set your timezone
+
+function doGet(e){
+  Logger.log("=== New Request Started ===");
+  Logger.log("Full request: " + JSON.stringify(e));
+  
+  // Check if parameters are defined
+  if (e.parameter == 'undefined') {
+    Logger.log("ERROR: Received data is undefined");
+    return ContentService.createTextOutput("Received data is undefined");
+  }
+  
+  // Get current date and time
+  var Curr_Date = new Date();
+  var Curr_Time = Utilities.formatDate(Curr_Date, timezone, 'HH:mm:ss');
+  var name = stripQuotes(e.parameters.name);
+  
+  Logger.log("Extracted name: '" + name + "'");
+  Logger.log("Current date: " + Curr_Date);
+  Logger.log("Current time: " + Curr_Time);
+  
+  // Get phone number for the person
+  var phoneNumber = getPhoneNumber(name);
+  Logger.log("Retrieved phone number: '" + phoneNumber + "'");
+  
+  // Add data to attendance sheet
+  try {
+    var nextRow = attendanceSheet.getLastRow() + 1;
+    Logger.log("Writing to row: " + nextRow);
+    
+    attendanceSheet.getRange("A" + nextRow).setValue(Curr_Date);
+    attendanceSheet.getRange("B" + nextRow).setValue(Curr_Time);
+    attendanceSheet.getRange("C" + nextRow).setValue(name);
+    attendanceSheet.getRange("D" + nextRow).setValue(phoneNumber);
+    
+    Logger.log("Data written successfully to all columns");
+    
+  } catch (error) {
+    Logger.log("ERROR writing to sheet: " + error.toString());
+    return ContentService.createTextOutput("Error writing to sheet: " + error.toString());
+  }
+  
+  // Return response back to ESP8266
+  var response = "Attendance recorded for " + name + " with phone " + phoneNumber;
+  Logger.log("Response: " + response);
+  Logger.log("=== Request Completed ===");
+  
+  return ContentService.createTextOutput(response);
+}
+
+// Function to get phone number based on name
+function getPhoneNumber(name) {
+  Logger.log("--- Getting phone number for: '" + name + "' ---");
+  
+  try {
+    // Check if contacts sheet exists
+    if (!contactsSheet) {
+      Logger.log("ERROR: Contacts sheet not found!");
+      return "CONTACTS_SHEET_NOT_FOUND";
+    }
+    
+    // Get all data from contacts sheet
+    var contactsData = contactsSheet.getDataRange().getValues();
+    Logger.log("Contacts sheet data: " + JSON.stringify(contactsData));
+    Logger.log("Number of rows in contacts: " + contactsData.length);
+    
+    // Search for the name and return corresponding phone number
+    for (var i = 1; i < contactsData.length; i++) { // Start from row 1 (skip header)
+      var contactName = contactsData[i][0].toString().trim();
+      var contactPhone = contactsData[i][1].toString().trim();
+      
+      Logger.log("Comparing '" + name.toLowerCase() + "' with '" + contactName.toLowerCase() + "'");
+      
+      if (contactName.toLowerCase() === name.toLowerCase()) {
+        Logger.log("MATCH FOUND! Phone: " + contactPhone);
+        return contactPhone;
+      }
+    }
+    
+    // If name not found, return descriptive message
+    Logger.log("NO MATCH FOUND for name: '" + name + "'");
+    return "NAME_NOT_FOUND";
+    
+  } catch (error) {
+    Logger.log("ERROR in getPhoneNumber: " + error.toString());
+    return "ERROR: " + error.toString();
+  }
+}
+
+// Helper function to remove quotes
+function stripQuotes(value) {
+  if (value) {
+    return value.toString().replace(/^["']|['"]$/g, "").trim();
+  }
+  return "";
+}
+
+// Function to manually test the phone lookup (for debugging)
+function testPhoneLookup() {
+  Logger.log("=== Manual Test ===");
+  var testName = "Victor"; // Change this to test different names
+  var result = getPhoneNumber(testName);
+  Logger.log("Test result for '" + testName + "': " + result);
+}
